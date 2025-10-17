@@ -7,11 +7,10 @@ route directions in the GeoJSON file.
 
 import json
 import csv
-import sys
 
 def load_geojson_nodes(geojson_file):
     """Load nodes with their associated directions from geojson file."""
-    with open(geojson_file, 'r') as f:
+    with open(geojson_file, 'r', encoding='utf-8') as f:
         data = json.load(f)
     
     nodes_dict = {}
@@ -34,7 +33,11 @@ def add_direction_to_csv(csv_input, csv_output, nodes_dict):
     """Add direction column to CSV file based on node directions from geojson."""
     with open(csv_input, 'r', encoding='utf-8') as f_in:
         reader = csv.DictReader(f_in)
-        fieldnames = reader.fieldnames + ['direction']
+        
+        if reader.fieldnames is None:
+            raise ValueError(f"CSV file {csv_input} is empty or malformed")
+        
+        fieldnames = list(reader.fieldnames) + ['direction']
         
         with open(csv_output, 'w', encoding='utf-8', newline='') as f_out:
             writer = csv.DictWriter(f_out, fieldnames=fieldnames)

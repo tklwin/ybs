@@ -57,6 +57,15 @@ This will read `ybs_clean_with_id.csv` and `ybs_route.geojson`, then update the 
 - Bus stops with direction information: 1,956 (93%)
 - Bus stops without direction information: 150 (7%)
 
+## Data Quality Notes
+
+The direction data is sourced directly from OpenStreetMap and may contain:
+- Mixed capitalization (e.g., "Outbound" vs "outbound")
+- Inconsistent formatting
+- Some misspellings from the original OSM data (e.g., "norhtwest" instead of "northwest")
+
+These values are preserved as-is from the source data. If data normalization is needed for your use case, consider implementing a post-processing step to standardize direction values.
+
 ## Data Source
 
 The data is sourced from OpenStreetMap (OSM) and represents the Yangon Regional Transport Authority (YRTA) bus network operated by YBS.
