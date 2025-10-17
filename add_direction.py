@@ -37,7 +37,10 @@ def add_direction_to_csv(csv_input, csv_output, nodes_dict):
         if reader.fieldnames is None:
             raise ValueError(f"CSV file {csv_input} is empty or malformed")
         
-        fieldnames = list(reader.fieldnames) + ['direction']
+        # Only add direction column if it doesn't already exist
+        fieldnames = list(reader.fieldnames)
+        if 'direction' not in fieldnames:
+            fieldnames.append('direction')
         
         with open(csv_output, 'w', encoding='utf-8', newline='') as f_out:
             writer = csv.DictWriter(f_out, fieldnames=fieldnames)
