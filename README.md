@@ -16,6 +16,8 @@ This repository contains data about Yangon Bus Service (YBS) bus stops and route
 
 - **add_direction.py**: Python script to add direction column to the CSV file
 
+- **example_rename_stops.py**: Example script demonstrating how to use the direction data to rename bus stops
+
 ## Understanding the Data
 
 The same bus stop name can appear multiple times in the CSV file because:
@@ -64,6 +66,16 @@ python3 add_direction.py
 ```
 
 This will read `ybs_clean_with_id.csv`, calculate geographic directions, and create an updated CSV file with direction information.
+
+### Using the Direction Data
+
+An example script `example_rename_stops.py` demonstrates how to use the direction data to rename bus stops:
+
+```bash
+python3 example_rename_stops.py
+```
+
+This example shows how to append cardinal directions to bus stop names (e.g., "Main Stop (North)" vs "Main Stop (South)") to distinguish stops on different sides of the street.
 
 ## Data Statistics
 
