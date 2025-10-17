@@ -1,36 +1,98 @@
 #!/usr/bin/env python3
 """
 Script to add direction column to bus stops CSV file.
-Uses the relationship between bus stops (nodes) in the CSV file and 
-route directions in the GeoJSON file.
+Calculates geographic cardinal directions (North, South, East, West) based on 
+the actual coordinates of bus stops to help distinguish bus stops on different 
+sides of the street.
 """
 
 import json
 import csv
+from collections import defaultdict
 
-def load_geojson_nodes(geojson_file):
-    """Load nodes with their associated directions from geojson file."""
-    with open(geojson_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    
-    nodes_dict = {}
-    for feature in data['features']:
-        if feature['geometry']['type'] == 'Point':
-            node_id = feature['properties'].get('@id', '')
-            if '@relations' in feature['properties']:
-                # Collect all unique directions for this node from its relations
-                directions = set()
-                for rel in feature['properties']['@relations']:
-                    if 'reltags' in rel and 'direction' in rel['reltags']:
-                        directions.add(rel['reltags']['direction'])
-                
-                # Join all directions with semicolon separator
-                nodes_dict[node_id] = '; '.join(sorted(directions)) if directions else ''
-    
-    return nodes_dict
+def parse_coordinates(geometry_str):
+    """Parse coordinates from POINT geometry string."""
+    # Format: "POINT (longitude latitude)"
+    coords = geometry_str.replace('POINT (', '').replace(')', '')
+    lon, lat = map(float, coords.split())
+    return lat, lon
 
-def add_direction_to_csv(csv_input, csv_output, nodes_dict):
-    """Add direction column to CSV file based on node directions from geojson."""
+def calculate_cardinal_direction(lat, lon, centroid_lat, centroid_lon):
+    """
+    Calculate cardinal direction of a point relative to a centroid.
+    Returns combination of N/S and E/W based on position.
+    """
+    # Threshold for considering a direction (in degrees)
+    # About 0.0001 degrees ~ 11 meters
+    threshold = 0.0001
+    
+    directions = []
+    
+    # Calculate North/South
+    lat_diff = lat - centroid_lat
+    if abs(lat_diff) > threshold:
+        if lat_diff > 0:
+            directions.append('North')
+        else:
+            directions.append('South')
+    
+    # Calculate East/West
+    lon_diff = lon - centroid_lon
+    if abs(lon_diff) > threshold:
+        if lon_diff > 0:
+            directions.append('East')
+        else:
+            directions.append('West')
+    
+    # Combine directions (e.g., "North-East")
+    if directions:
+        return '-'.join(directions)
+    else:
+        return ''
+
+def calculate_geographic_directions(csv_input):
+    """
+    Calculate geographic cardinal directions for bus stops.
+    For bus stops with the same name, determine their relative position
+    (North, South, East, West) based on coordinates.
+    """
+    # First pass: group bus stops by name and collect their coordinates
+    stops_by_name = defaultdict(list)
+    
+    with open(csv_input, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            lat, lon = parse_coordinates(row['geometry'])
+            stops_by_name[row['name']].append({
+                'node_id': row['@id'],
+                'lat': lat,
+                'lon': lon,
+                'geometry': row['geometry']
+            })
+    
+    # Calculate directions for each stop
+    directions_dict = {}
+    
+    for name, stops in stops_by_name.items():
+        if len(stops) == 1:
+            # Single stop with this name - no direction needed
+            directions_dict[stops[0]['node_id']] = ''
+        else:
+            # Multiple stops with same name - calculate centroid and directions
+            centroid_lat = sum(s['lat'] for s in stops) / len(stops)
+            centroid_lon = sum(s['lon'] for s in stops) / len(stops)
+            
+            for stop in stops:
+                direction = calculate_cardinal_direction(
+                    stop['lat'], stop['lon'], 
+                    centroid_lat, centroid_lon
+                )
+                directions_dict[stop['node_id']] = direction
+    
+    return directions_dict
+
+def add_direction_to_csv(csv_input, csv_output, directions_dict):
+    """Add direction column to CSV file based on calculated geographic directions."""
     with open(csv_input, 'r', encoding='utf-8') as f_in:
         reader = csv.DictReader(f_in)
         
@@ -48,31 +110,43 @@ def add_direction_to_csv(csv_input, csv_output, nodes_dict):
             
             for row in reader:
                 node_id = row['@id']
-                # Add direction from nodes_dict, or empty string if not found
-                row['direction'] = nodes_dict.get(node_id, '')
+                # Add direction from directions_dict, or empty string if not found
+                row['direction'] = directions_dict.get(node_id, '')
                 writer.writerow(row)
 
 def main():
-    geojson_file = 'ybs_route.geojson'
     csv_input = 'ybs_clean_with_id.csv'
     csv_output = 'ybs_clean_with_id_and_direction.csv'
     
-    print(f"Loading nodes from {geojson_file}...")
-    nodes_dict = load_geojson_nodes(geojson_file)
-    print(f"Loaded {len(nodes_dict)} nodes with direction information")
+    print(f"Calculating geographic directions for bus stops in {csv_input}...")
+    directions_dict = calculate_geographic_directions(csv_input)
     
-    print(f"Processing {csv_input}...")
-    add_direction_to_csv(csv_input, csv_output, nodes_dict)
-    print(f"Created {csv_output} with direction column")
+    # Count stops with directions
+    stops_with_direction = sum(1 for d in directions_dict.values() if d)
+    print(f"Calculated directions for {stops_with_direction} bus stops (out of {len(directions_dict)} total)")
     
-    # Show some sample output
-    print("\nSample output (first 10 rows):")
+    print(f"Adding direction column to CSV...")
+    add_direction_to_csv(csv_input, csv_output, directions_dict)
+    print(f"Created {csv_output} with geographic direction column")
+    
+    # Show some sample output - focus on stops with same name
+    print("\nSample output showing bus stops with same name but different locations:")
+    stops_by_name = defaultdict(list)
     with open(csv_output, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
-        for i, row in enumerate(reader):
-            if i >= 10:
-                break
-            print(f"{row['name']}: {row['direction']}")
+        for row in reader:
+            stops_by_name[row['name']].append(row)
+    
+    # Show a few examples with multiple locations
+    count = 0
+    for name, stops in stops_by_name.items():
+        if len(stops) > 1 and count < 3:
+            print(f"\n'{name}':")
+            for stop in stops:
+                coords = stop['geometry'].replace('POINT (', '').replace(')', '')
+                direction = stop['direction'] if stop['direction'] else '(center/single)'
+                print(f"  {direction}: {coords}")
+            count += 1
 
 if __name__ == '__main__':
     main()

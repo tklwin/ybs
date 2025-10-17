@@ -8,13 +8,15 @@ This repository contains data about Yangon Bus Service (YBS) bus stops and route
   - `name`: Bus stop name (in Burmese)
   - `geometry`: Geographic coordinates (POINT format)
   - `@id`: OpenStreetMap node ID
-  - `direction`: Route directions served by this bus stop (semicolon-separated)
+  - `direction`: Geographic cardinal direction (North, South, East, West) indicating the bus stop's location relative to other stops with the same name
 
 - **ybs_route.geojson**: GeoJSON file containing bus route geometries and relationships
-  - Contains route information with directions
+  - Contains route information
   - Contains node (bus stop) information with their associated routes
 
 - **add_direction.py**: Python script to add direction column to the CSV file
+
+- **example_rename_stops.py**: Example script demonstrating how to use the direction data to rename bus stops
 
 ## Understanding the Data
 
@@ -26,22 +28,36 @@ The same bus stop name can appear multiple times in the CSV file because:
 ### Example
 
 ```csv
-( ၁ ) ဈေး ကွေ့ မှတ်တိုင်,POINT (96.1952103 16.7961857),node/4841300197,E; east; forward; inbound
-( ၁ ) ဈေး ကွေ့ မှတ်တိုင်,POINT (96.1954986 16.7964999),node/4841300198,E; east; outbound; southeast
+( ၁ ) နံပါတ် မှတ်တိုင်,POINT (96.124055 16.9749017),node/4841337261,West
+( ၁ ) နံပါတ် မှတ်တိုင်,POINT (96.124309 16.974721),node/4841337262,East
 ```
 
-In this example, the same bus stop "( ၁ ) ဈေး ကွေ့ မှတ်တိုင်" appears twice with:
+In this example, the same bus stop "( ၁ ) နံပါတ် မှတ်တိုင်" appears twice with:
 - Different coordinates (different sides of the road)
 - Different node IDs
-- Different directions (inbound vs outbound)
+- Different geographic directions (West vs East) based on their relative positions
 
 ## How the Script Works
 
 The `add_direction.py` script:
-1. Loads bus route data from `ybs_route.geojson`
-2. Extracts direction information from each route that includes a bus stop
-3. Maps each bus stop node ID to its associated directions
-4. Adds a `direction` column to the CSV file
+1. Loads bus stop data from `ybs_clean_with_id.csv`
+2. Groups bus stops by name
+3. For bus stops with the same name (indicating multiple stops on different sides of the street):
+   - Calculates the centroid (average position) of all stops with that name
+   - Determines each stop's cardinal direction (North, South, East, West) relative to the centroid
+   - Assigns geographic direction labels to distinguish them
+4. Adds a `direction` column to the CSV file with these cardinal directions
+
+### Geographic Direction Calculation
+
+The script calculates cardinal directions based on actual geographic coordinates:
+- **North**: Bus stop is north of the centroid of stops with the same name
+- **South**: Bus stop is south of the centroid
+- **East**: Bus stop is east of the centroid
+- **West**: Bus stop is west of the centroid
+- **North-East**, **North-West**, **South-East**, **South-West**: Diagonal positions
+
+This helps identify which side of the street or intersection a bus stop is located on.
 
 ### Running the Script
 
@@ -49,22 +65,40 @@ The `add_direction.py` script:
 python3 add_direction.py
 ```
 
-This will read `ybs_clean_with_id.csv` and `ybs_route.geojson`, then update the CSV file with direction information.
+This will read `ybs_clean_with_id.csv`, calculate geographic directions, and create an updated CSV file with direction information.
+
+### Using the Direction Data
+
+An example script `example_rename_stops.py` demonstrates how to use the direction data to rename bus stops:
+
+```bash
+python3 example_rename_stops.py
+```
+
+This example shows how to append cardinal directions to bus stop names (e.g., "Main Stop (North)" vs "Main Stop (South)") to distinguish stops on different sides of the street.
 
 ## Data Statistics
 
 - Total bus stops: 2,106
-- Bus stops with direction information: 1,956 (93%)
-- Bus stops without direction information: 150 (7%)
+- Unique bus stop names: 889
+- Bus stops with multiple locations (same name, different coordinates): 796
+- Bus stops with calculated directions: 1,313 (62%)
+- Bus stops without directions: 793 (38% - these are unique names with only one location)
 
 ## Data Quality Notes
 
-The direction data is sourced directly from OpenStreetMap and may contain:
-- Mixed capitalization (e.g., "Outbound" vs "outbound")
-- Inconsistent formatting
-- Some misspellings from the original OSM data (e.g., "norhtwest" instead of "northwest")
+The direction data is calculated from the geographic coordinates of bus stops:
+- Cardinal directions (North, South, East, West) are based on relative positions
+- Stops very close to the centroid (within ~11 meters) may not have a direction assigned
+- The direction helps distinguish bus stops on different sides of a street or at different corners of an intersection
 
-These values are preserved as-is from the source data. If data normalization is needed for your use case, consider implementing a post-processing step to standardize direction values.
+## Use Cases
+
+The geographic direction information is useful for:
+- Renaming bus stops to include their location (e.g., "Main Street (North side)" vs "Main Street (South side)")
+- Navigation and wayfinding applications
+- Distinguishing which side of the street a bus stop is on
+- Identifying the correct bus stop when multiple stops share the same name
 
 ## Data Source
 
